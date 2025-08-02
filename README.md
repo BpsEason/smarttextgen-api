@@ -1,4 +1,4 @@
-# SmartTextGen API: 場景化的 AI 文字生成服務 (v4 - 生產級增強版)
+# SmartTextGen API: 場景化的 AI 文字生成服務
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.0.1-brightgreen.svg)](https://flask.palletsprojects.com/)
