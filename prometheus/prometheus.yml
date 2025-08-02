@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'smarttextgen-api'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['smarttextgen-api:5000']
+        labels:
+          environment: ${FLASK_ENV:-development}
+          service: smarttextgen-api

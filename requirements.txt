@@ -1,0 +1,14 @@
+Flask==2.0.1
+gunicorn==20.1.0
+transformers==4.30.2
+torch==2.0.1
+redis==4.5.4
+pytest==7.1.2
+gevent==21.12.0
+prometheus_flask_exporter==0.18.1
+flask-pydantic==0.11.0
+flask-cors==4.0.1
+flasgger==0.9.5
+locust==2.29.1
+black==24.8.0
+bandit==1.7.5

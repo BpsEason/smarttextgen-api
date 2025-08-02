@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  smarttextgen-api:
+    build:
+      context: .
+      args:
+        - MODEL_NAME=distilgpt2
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - PORT=5000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MODEL_NAME=distilgpt2
+      - WORKERS=3
+      - WORKER_CLASS=gevent
+      - CACHE_TTL=600
+      - API_KEY=${API_KEY:-my-secure-api-key}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - PROMETHEUS_HOST=prometheus:9090
+      - PROMETHEUS_PATH=/metrics
+      # For GPU inference, uncomment the following line and configure as needed
+      # - DEVICE=0
+    depends_on:
+      - redis
+      - prometheus
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:6.2-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  prometheus:
+    image: prom/prometheus:v2.30.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - "9090:9090"
+    restart: always
+
+  grafana:
+    image: grafana/grafana:8.2.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    depends_on:
+      - prometheus
+    restart: always
+
+volumes:
+  redis_data:
