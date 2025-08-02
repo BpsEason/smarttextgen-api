@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# Virtual environment
+venv/
+
+# Docker
+.dockerignore
+
+# Tests
+.pytest_cache/
+htmlcov/
+.coverage
+locust_report/
+
+# Datasets and models
+data/
+models/
+
+# Monitoring
+prometheus/
+grafana-provisioning/
+
+# CI/CD
+.github/workflows/*.log
