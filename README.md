@@ -214,6 +214,93 @@
    - 定期運行 Locust 負載測試以驗證效能。
    - 檢查 Prometheus 指標以發現性能瓶頸。
 
+## 常見問題（FAQ）
+
+以下是開發者可能關心的問題與解答，涵蓋 API 使用、效能、安全性和部署。
+
+### 1. 如何使用 API 生成特定場景的文字？
+您可以通過 `/api/generate` 或 `/api/generate_batch` 端點，指定 `mode` 參數（`general`、`recommendation`、`support` 或 `ecommerce`）來生成對應場景的文字。例如，電商模式的請求：
+```bash
+curl -X POST http://localhost:5000/api/generate \
+-H "Content-Type: application/json" \
+-H "X-API-Key: your-secure-api-key" \
+-d '{"prompt": "為一款防水夾克寫產品文案", "mode": "ecommerce"}'
+```
+每個模式使用特定的提示模板（定義於 `prompt_templates.py`），確保回應符合場景需求。
+
+### 2. 如何確保 API 的安全性？
+API 採用多層安全措施：
+- **API Key 認證**：所有請求需包含正確的 `X-API-Key`（設置於 `.env` 中的 `API_KEY`）。
+- **輸入驗證**：使用 `flask-pydantic` 限制 `prompt` 長度（1-500 字）並驗證 JSON 結構。
+- **Prompt Injection 防護**：在 `prompt_templates.py` 中清理危險字符（如 `{`, `}`, ```）。
+- **CORS**：生產環境通過 `ALLOWED_ORIGINS` 限制來源。
+- **容器安全**：Docker 映像使用非 root 使用者（`appuser`）運行。
+
+### 3. 如何處理高併發請求？
+API 通過以下方式支援高併發：
+- **Gunicorn + Gevent**：使用多進程和非同步工人處理並行請求（`docker-compose.yml` 中設置 `WORKERS=3` 和 `WORKER_CLASS=gevent`）。
+- **快取機制**：Redis 快取（TTL 10 分鐘）和本地 LRU 快取（`functools.lru_cache`）減少重複計算。
+- **批次處理**：`/api/generate_batch` 端點允許多個 prompt 合併處理，降低模型推論開銷。
+您可以通過 Locust 負載測試（`tests/locustfile.py`）模擬高併發並檢查 Grafana 指標。
+
+### 4. 如何查看 API 的文件？
+API 文件通過 Swagger UI 提供，訪問 `http://localhost:5000/apidocs`。文件由 `flasgger` 自動生成，涵蓋 `/health`、`/api/generate` 和 `/api/generate_batch` 的請求/回應結構、參數和錯誤碼。您可以直接在 Swagger UI 中測試端點。
+
+### 5. 如何監控 API 的效能？
+API 整合了 Prometheus 和 Grafana：
+- **Prometheus**：公開 `/metrics` 端點，收集請求數、延遲和錯誤率（配置於 `prometheus/prometheus.yml`）。
+- **Grafana**：提供儀表板（`grafana-provisioning/dashboards/dashboard.json`），展示 HTTP 請求速率、p95 延遲和 5xx 錯誤率。
+訪問 `http://localhost:3000`（預設登入：admin/your-secure-password），導覽至 **Dashboards -> Browse** 查看 **SmartTextGen API Metrics**。
+
+### 6. 如何進行負載測試？
+使用 Locust 進行負載測試（`tests/locustfile.py`）：
+```bash
+locust -f tests/locustfile.py --host=http://localhost:5000
+```
+在瀏覽器打開 `http://localhost:8089`，設置用戶數（例如 50）、生成速率（10/s）和運行時間（1 分鐘）。報告儲存於 `locust_report/`，並可結合金 Grafana 監控負載期間的指標（如延遲和錯誤率）。
+
+### 7. 如何儲存和使用對話歷史？
+對話歷史通過 Redis 儲存，與 `user_id` 綁定：
+- 每次 `/api/generate` 或 `/api/generate_batch` 請求，若提供 `user_id`，歷史會儲存至 Redis（最多保留最近 3 輪對話，6 條記錄）。
+- 歷史記錄用於上下文生成，確保回應連貫。
+檢查 Redis 內容：
+```bash
+docker-compose exec redis redis-cli -n 0 KEYS '*'
+```
+
+### 8. 如何切換不同的 AI 模型？
+API 支援通過環境變數 `MODEL_NAME` 切換模型（預設為 `distilgpt2`）。例如，在 `.env` 中設置：
+```env
+MODEL_NAME=gpt2-medium
+```
+重新構建映像：
+```bash
+docker-compose up --build
+```
+模型在 Dockerfile 構建時下載（`ai_core.py` 中使用 `transformers.pipeline` 載入）。若使用 GPU 推論，需設置 `DEVICE=0` 並使用 CUDA 映像。
+
+### 9. 如何在生產環境中部署？
+1. 編輯 `.env` 文件，設置 `FLASK_ENV=production`、`API_KEY`、`ALLOWED_ORIGINS` 和 `GRAFANA_ADMIN_PASSWORD`。
+2. 運行：
+   ```bash
+   docker-compose up -d
+   ```
+3. 定期檢查 Grafana 儀表板和 Locust 報告，確保服務穩定。使用健康檢查端點（`/health`）監控模型和 Redis 狀態。
+
+### 10. 如何擴展 API 以支援更多場景？
+新增場景需修改 `prompt_templates.py` 中的 `templates` 字典。例如，添加一個「教育」模式：
+```python
+templates['education'] = "你是一個教育助手。參考歷史對話: {history_context}。根據以下問題：'{user_input}'，提供清晰且結構化的解答。"
+```
+更新 `app.py` 中的 `VALID_MODES` 列表：
+```python
+VALID_MODES = ['general', 'recommendation', 'support', 'ecommerce', 'education']
+```
+然後重新構建並部署：
+```bash
+docker-compose up --build
+```
+
 ---
 
-*這個專案旨在展示高品質的 AI 應用開發，適合用於商業場景展示或面試作品集。歡迎 fork 和貢獻！*
+*這個專案旨在展示高品質的 AI 應用開發，適合用於商業場景展示或技術討論。歡迎 fork 和貢獻！*
